@@ -1,0 +1,230 @@
+# Builds, checks and publishes a release, then waits for the community
+# directory to review it.
+#
+# It runs by itself when a push to main changes manifest.json to a version
+# that has no release yet, which is what merging a version bump does. That
+# keeps the window between main naming a new version and that release being
+# public down to the length of this job; the directory's scan reads
+# manifest.json on main and fails with "missing asset" if it looks inside that
+# window. It can also be started from Actions -> Release -> Run workflow, to
+# retry, to release a given version, or to leave the result as a draft.
+#
+# Nothing is published unless every gate passes: the tag matches manifest.json
+# and versions.json, the changelog has a section for it, and lint, tests,
+# build and Obsidian's own review linter (eslint-plugin-obsidianmd, the rules
+# the directory's scan runs) are all clean.
+#
+# There is no tag-push trigger on purpose: publishing a release creates its
+# tag, and that trigger used to fire this workflow again and leave a duplicate
+# draft behind.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [manifest.json]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Version to release, exactly as manifest.json has it (e.g. 0.1.0). Empty: the version in manifest.json.'
+        required: false
+      draft:
+        description: 'Leave the release as a draft instead of publishing it'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  # Both are required by actions/attest-build-provenance.
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      id: ${{ steps.version.outputs.id }}
+      skip: ${{ steps.version.outputs.skip }}
+      draft: ${{ steps.version.outputs.draft }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 22 and no lower: the tests run `node --test` straight on .ts files.
+          node-version: '22'
+
+      - name: Decide the version
+        id: version
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+          INPUT_DRAFT: ${{ github.event.inputs.draft }}
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          TAG="${INPUT_TAG:-$VERSION}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "id=$(node -p "require('./manifest.json').id")" >> "$GITHUB_OUTPUT"
+          echo "draft=${INPUT_DRAFT:-false}" >> "$GITHUB_OUTPUT"
+          state=$(gh release view "$TAG" --json isDraft --jq 'if .isDraft then "draft" else "published" end' 2>/dev/null || echo none)
+          if [ "$state" = published ]; then
+            # A manifest.json edit that is not a version bump lands here.
+            echo "Release $TAG is already published; nothing to do." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check the tag against manifest.json and versions.json
+        if: steps.version.outputs.skip != 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          VERSION=$(node -p "require('./manifest.json').version")
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "Tag '$TAG' does not match manifest.json version '$VERSION'." >&2
+            exit 1
+          fi
+          node -e "
+            const versions = require('./versions.json');
+            const manifest = require('./manifest.json');
+            const mapped = versions[manifest.version];
+            if (!mapped) {
+              console.error('versions.json has no entry for ' + manifest.version + '.');
+              process.exit(1);
+            }
+            if (mapped !== manifest.minAppVersion) {
+              console.error('versions.json maps ' + manifest.version + ' to ' + mapped +
+                ', but minAppVersion is ' + manifest.minAppVersion + '.');
+              process.exit(1);
+            }
+          "
+
+      - if: steps.version.outputs.skip != 'true'
+        run: npm ci
+      - if: steps.version.outputs.skip != 'true'
+        run: npm run lint
+      - if: steps.version.outputs.skip != 'true'
+        run: npm test
+      - if: steps.version.outputs.skip != 'true'
+        run: npm run build
+
+      # The directory's scan lints the source with eslint-plugin-obsidianmd.
+      # Errors here are the findings it rates high (an API newer than
+      # minAppVersion, for one), so they stop the release; its warnings are
+      # printed for reading but do not.
+      - name: Run Obsidian's review linter
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          npm install --no-save --no-audit --no-fund --legacy-peer-deps eslint-plugin-obsidianmd@0.4.2
+          cat > .review-lint.config.mjs <<'EOF'
+          import obsidianmd from 'eslint-plugin-obsidianmd';
+          export default [
+            { ignores: ['main.js', 'node_modules/**', 'tests/**', '**/*.mjs', '**/*.cjs', '**/*.test.*', '**/*.spec.*'] },
+            ...obsidianmd.configs.recommended,
+            { languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: process.cwd() } } },
+          ];
+          EOF
+          npx eslint -c .review-lint.config.mjs .
+
+      # A release with no description is a finding in Obsidian's plugin
+      # review, so the notes come from CHANGELOG.md and a missing section
+      # stops the release rather than shipping an empty one.
+      - name: Take the release notes from CHANGELOG.md
+        if: steps.version.outputs.skip != 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          awk -v version="## $TAG" '
+            $0 == version { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if [ ! -s release-notes.md ]; then
+            echo "CHANGELOG.md has no '## $TAG' section to use as release notes." >&2
+            exit 1
+          fi
+          cat release-notes.md
+
+      # styles.css is optional; the same workflow serves plugins with and
+      # without one.
+      - name: List the release assets
+        id: assets
+        if: steps.version.outputs.skip != 'true'
+        run: |
+          code=(main.js)
+          [ -f styles.css ] && code+=(styles.css)
+          { echo 'code<<EOF'; printf '%s\n' "${code[@]}"; echo EOF; } >> "$GITHUB_OUTPUT"
+          echo "all=${code[*]} manifest.json" >> "$GITHUB_OUTPUT"
+
+      # Lets anyone verify with `gh attestation verify` that these files were
+      # built by this workflow from this repository. The directory's scan
+      # checks it too.
+      - name: Attest the build provenance of the release assets
+        if: steps.version.outputs.skip != 'true'
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: ${{ steps.assets.outputs.code }}
+
+      - name: Publish the release
+        if: steps.version.outputs.skip != 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          DRAFT: ${{ steps.version.outputs.draft }}
+          ASSETS: ${{ steps.assets.outputs.all }}
+        run: |
+          # An earlier draft of this same version is replaced by this build.
+          if gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null | grep -qx true; then
+            gh release delete "$TAG" --yes
+          fi
+          flags=()
+          if [ "$DRAFT" = true ]; then flags+=(--draft); fi
+          gh release create "$TAG" \
+            --title="$TAG" \
+            --target "${{ github.sha }}" \
+            --notes-file release-notes.md \
+            "${flags[@]}" \
+            $ASSETS
+          echo "Released $TAG$( [ "$DRAFT" = true ] && echo ' as a draft')." | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Releases are cumulative from main, so once one is published every
+      # draft at or below its version is stale.
+      - name: Delete stale drafts
+        if: steps.version.outputs.skip != 'true' && steps.version.outputs.draft != 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release list --limit 100 --json tagName,isDraft --jq '.[] | select(.isDraft) | .tagName' |
+          while read -r draft; do
+            [ -n "$draft" ] || continue
+            lowest=$(printf '%s\n%s\n' "$draft" "$TAG" | sort -V | head -1)
+            if [ "$lowest" = "$draft" ]; then
+              gh release delete "$draft" --yes
+              echo "Deleted stale draft $draft." | tee -a "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+
+  # Waits for the community directory to serve the new version and review it,
+  # and fails, which emails the repository owner, if the review does not pass
+  # or the directory never picks the release up. Reading the listing needs no
+  # login; see .github/scripts/directory-review.mjs.
+  directory-review:
+    needs: release
+    if: needs.release.outputs.skip != 'true' && needs.release.outputs.draft != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Wait for the directory's review
+        run: node .github/scripts/directory-review.mjs "${{ needs.release.outputs.id }}" --wait "${{ needs.release.outputs.tag }}" --timeout 75 --settle 10

@@ -1,0 +1,35 @@
+/* The breadcrumb bar above a zoomed note. */
+.zoom-into-section-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--size-2-2) var(--size-4-1);
+  padding: var(--size-4-2) var(--file-margins);
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.zoom-into-section-crumb[role='button'] {
+  cursor: pointer;
+}
+
+.zoom-into-section-crumb[role='button']:hover,
+.zoom-into-section-crumb[role='button']:focus-visible {
+  color: var(--text-normal);
+  text-decoration: underline;
+}
+
+.zoom-into-section-crumb.is-current {
+  color: var(--text-normal);
+  font-weight: var(--font-semibold);
+}
+
+.zoom-into-section-sep {
+  color: var(--text-faint);
+}
+
+/* A bullet you can click to zoom. */
+.zoom-into-section-bullets .markdown-source-view.mod-cm6 .cm-formatting-list-ul,
+.zoom-into-section-bullets .markdown-source-view.mod-cm6 .cm-formatting-list-ol {
+  cursor: pointer;
+}

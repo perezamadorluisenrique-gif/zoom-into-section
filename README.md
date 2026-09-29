@@ -74,6 +74,7 @@ In Obsidian, open **Settings → Community plugins → Browse** and search for
 | [List Item Callouts](https://obsidian.md/plugins?id=list-item-callouts) | Colour a single list item as a callout by starting it with a character such as `&`, `!` or `?`. | [list-item-callouts](https://github.com/perezamadorluisenrique-gif/list-item-callouts) |
 | [Folder Counts](https://obsidian.md/plugins?id=folder-counts) | See how many notes each folder holds, right in the file explorer. | [folder-counts](https://github.com/perezamadorluisenrique-gif/folder-counts) |
 | [Task Rollover](https://obsidian.md/plugins?id=task-rollover) | Move the unfinished tasks of your last daily note into today's note when it is created. | [task-rollover](https://github.com/perezamadorluisenrique-gif/task-rollover) |
+| [Note Reading Time](https://obsidian.md/plugins?id=note-reading-time) | Reading time of the current note or your selection in the status bar, optionally saved to a property. | [note-reading-time](https://github.com/perezamadorluisenrique-gif/note-reading-time) |
 
 ## License
 

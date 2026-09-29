@@ -1,0 +1,29 @@
+# Build and test on every push and pull request, so a broken commit is caught
+# here rather than by the release job with a tag already cut.
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # 22 and no lower: the tests run `node --test` straight on .ts files,
+          # and the type stripping that needs arrives in 22.18.
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      # The same rules Obsidian's plugin review runs.
+      - run: npm run lint
+      # The build script runs `tsc -noEmit` before bundling with esbuild.
+      - run: npm run build
+      - run: npm test

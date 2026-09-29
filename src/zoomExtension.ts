@@ -1,5 +1,5 @@
 // The CodeMirror side of zooming. It imports CodeMirror but not `obsidian`.
-import { EditorSelection, EditorState, Facet, StateEffect, StateField } from '@codemirror/state';
+import { EditorSelection, EditorState, Facet, Prec, StateEffect, StateField } from '@codemirror/state';
 import type { Range as CmRange, Extension, SelectionRange, TransactionSpec } from '@codemirror/state';
 import { Decoration, EditorView, showPanel } from '@codemirror/view';
 import type { DecorationSet, Panel } from '@codemirror/view';
@@ -12,6 +12,8 @@ export interface ZoomOptions {
   title: (view: EditorView) => string;
   /** Zoom in when a list bullet is clicked. */
   zoomOnBullet: () => boolean;
+  /** Escape zooms out one level while zoomed. */
+  escapeZoomsOut: () => boolean;
 }
 
 const setZoom = StateEffect.define<Range | null>({
@@ -52,7 +54,7 @@ const hiddenField = StateField.define<DecorationSet>({
 });
 
 const options = Facet.define<ZoomOptions, ZoomOptions>({
-  combine: (values) => values[0] ?? { title: () => 'Note', zoomOnBullet: () => false },
+  combine: (values) => values[0] ?? { title: () => 'Note', zoomOnBullet: () => false, escapeZoomsOut: () => false },
 });
 
 function clamp(range: SelectionRange, zoom: Range): SelectionRange {
@@ -146,8 +148,18 @@ const bulletClick = EditorView.domEventHandlers({
   },
 });
 
+/** Escape climbs one level, and leaves the zoom at the top. Plain Escape only, so Vim mode and menus keep theirs when the setting is off. */
+const escapeKey = EditorView.domEventHandlers({
+  keydown(event, view) {
+    if (event.key !== 'Escape' || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing) return false;
+    if (!currentZoom(view.state) || !view.state.facet(options).escapeZoomsOut()) return false;
+    zoomParent(view);
+    return true;
+  },
+});
+
 export function zoomExtension(opts: ZoomOptions): Extension {
-  return [options.of(opts), zoomField, hiddenField, keepSelectionInside, bar, bulletClick];
+  return [options.of(opts), zoomField, hiddenField, keepSelectionInside, bar, bulletClick, Prec.high(escapeKey)];
 }
 
 export function currentZoom(state: EditorState): Range | null {

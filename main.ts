@@ -7,15 +7,21 @@ import { currentZoom, zoomExtension, zoomIn, zoomOut, zoomParent } from './src/z
 interface ZoomSettings {
   /** Clicking the bullet of a list item zooms into it. */
   zoomOnBullet: boolean;
+  /** Escape zooms out one level. */
+  escapeZoomsOut: boolean;
 }
 
-const DEFAULT_SETTINGS: ZoomSettings = { zoomOnBullet: true };
+const DEFAULT_SETTINGS: ZoomSettings = { zoomOnBullet: true, escapeZoomsOut: false };
 
 /** Names and descriptions shared by the 1.13+ declarative tab and the older `display()`. */
 const TEXT = {
   zoomOnBullet: {
     name: 'Zoom in when clicking a bullet',
     desc: 'Click the bullet of a list item in Live Preview to zoom into it. Headings and list items also have the Zoom in command and the editor menu.',
+  },
+  escapeZoomsOut: {
+    name: 'Escape zooms out',
+    desc: 'While zoomed, pressing Escape in the editor goes up one level, and out of the zoom at the top. Leave it off if you use Vim key bindings.',
   },
 };
 
@@ -36,6 +42,7 @@ export default class ZoomIntoSectionPlugin extends Plugin {
       zoomExtension({
         title: (view) => this.titleOf(view),
         zoomOnBullet: () => this.settings.zoomOnBullet,
+        escapeZoomsOut: () => this.settings.escapeZoomsOut,
       }),
     );
 
@@ -129,7 +136,10 @@ class ZoomSettingTab extends PluginSettingTab {
    * versions ignore it and call `display()`.
    */
   getSettingDefinitions(): SettingDefinitionItem[] {
-    return [{ ...TEXT.zoomOnBullet, control: { type: 'toggle', key: 'zoomOnBullet', defaultValue: DEFAULT_SETTINGS.zoomOnBullet } }];
+    return [
+      { ...TEXT.zoomOnBullet, control: { type: 'toggle', key: 'zoomOnBullet', defaultValue: DEFAULT_SETTINGS.zoomOnBullet } },
+      { ...TEXT.escapeZoomsOut, control: { type: 'toggle', key: 'escapeZoomsOut', defaultValue: DEFAULT_SETTINGS.escapeZoomsOut } },
+    ];
   }
 
   getControlValue(key: string): unknown {
@@ -149,5 +159,9 @@ class ZoomSettingTab extends PluginSettingTab {
       .setName(TEXT.zoomOnBullet.name)
       .setDesc(TEXT.zoomOnBullet.desc)
       .addToggle((t) => t.setValue(this.plugin.settings.zoomOnBullet).onChange((v) => this.setControlValue('zoomOnBullet', v)));
+    new Setting(containerEl)
+      .setName(TEXT.escapeZoomsOut.name)
+      .setDesc(TEXT.escapeZoomsOut.desc)
+      .addToggle((t) => t.setValue(this.plugin.settings.escapeZoomsOut).onChange((v) => this.setControlValue('escapeZoomsOut', v)));
   }
 }

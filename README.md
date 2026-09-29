@@ -45,6 +45,7 @@ Hotkeys**, for example Ctrl/Cmd + `.` to zoom in.
 | Setting | Default | What it does |
 |---|---|---|
 | Zoom in when clicking a bullet | on | Click the bullet of a list item in Live Preview to zoom into it. |
+| Escape zooms out | off | While zoomed, Escape goes up one level, and out of the zoom at the top. Leave it off with Vim key bindings. |
 
 ## Coming from Zoom
 

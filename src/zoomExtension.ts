@@ -86,8 +86,10 @@ const keepSelectionInside = EditorState.transactionFilter.of((tr) => {
 });
 
 function crumbBar(view: EditorView): Panel {
-  const dom = view.dom.ownerDocument.createElement('div');
-  dom.className = 'zoom-into-section-bar';
+  // Made inside the editor so it belongs to the right window (pop-outs), then
+  // detached: CodeMirror mounts it in the panel container.
+  const dom = view.dom.createDiv({ cls: 'zoom-into-section-bar' });
+  dom.detach();
   let timer: number | undefined;
 
   const render = () => {

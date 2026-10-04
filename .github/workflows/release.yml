@@ -104,6 +104,14 @@ jobs:
                 ', but minAppVersion is ' + manifest.minAppVersion + '.');
               process.exit(1);
             }
+            // The directory rejects these words in the name, id and description.
+            for (const key of ['name', 'id', 'description']) {
+              const found = ['obsidian', 'plugin'].filter((w) => String(manifest[key] ?? '').toLowerCase().includes(w));
+              if (found.length) {
+                console.error('manifest.json ' + key + ' contains ' + found.join(' and ') + ', which the directory rejects.');
+                process.exit(1);
+              }
+            }
           "
 
       - if: steps.version.outputs.skip != 'true'

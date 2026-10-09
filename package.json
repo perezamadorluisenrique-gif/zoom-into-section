@@ -1,6 +1,6 @@
 {
   "name": "zoom-into-section",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Zoom Into Section for Obsidian - Zoom into a heading or list item to see only it and its contents, with a breadcrumb bar to climb back out. Works without turning on any fold settings.",
   "main": "main.js",
   "scripts": {

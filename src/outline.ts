@@ -220,3 +220,121 @@ export function breadcrumbs(text: string, from: number): Crumb[] {
   for (let i = lineAt(o, from); i !== -1 && chain.length < 50; i = parentLine(o, i)) chain.push(i);
   return chain.reverse().map((i) => ({ from: o.lines[i].from, label: cleanLabel(o.lines[i].text) }));
 }
+
+export interface Heading {
+  /** Offset of the start of the heading line. */
+  from: number;
+  /** 1 for `#`, up to 6. */
+  level: number;
+  /** The heading as shown, without the `#` marker and its formatting. */
+  label: string;
+}
+
+/** Every heading of the note in order, leaving out `#` lines inside code blocks and the properties block. */
+export function listHeadings(text: string): Heading[] {
+  const o = analyse(text);
+  const out: Heading[] = [];
+  for (let i = 0; i < o.lines.length; i++) {
+    const l = level(o, i);
+    if (l > 0) out.push({ from: o.lines[i].from, level: l, label: cleanLabel(o.lines[i].text) });
+  }
+  return out;
+}
+
+/** How Obsidian compares a heading with the heading part of a link: case and link-breaking characters do not count. */
+function normalize(s: string): string {
+  return s
+    .replace(/[#|^:%[\]\\]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/** The heading text exactly as typed, without the marker or a closing run of `#`. */
+function rawHeading(line: string): string {
+  return line.replace(/^\s*#{1,6}[ \t]+/, '').replace(/[ \t]+#+[ \t]*$/, '');
+}
+
+function sameHeading(line: string, wanted: string): boolean {
+  const w = normalize(wanted);
+  return w !== '' && (normalize(rawHeading(line)) === w || normalize(cleanLabel(line)) === w);
+}
+
+/** True when line `i` carries the block id `id` at its end. */
+function hasBlockId(o: Outline, i: number, id: string): boolean {
+  const m = /(?:^|[ \t])\^([A-Za-z0-9-]+)[ \t]*$/.exec(o.lines[i].text);
+  return m !== null && m[1].toLowerCase() === id.toLowerCase();
+}
+
+/**
+ * What a link's subpath points at, as a range to zoom into: `#Heading`, nested `#A#B` (B is looked for under A),
+ * or `#^id` / `#A#^id` for a list item. Null when it does not resolve to a heading section or a list item,
+ * so a block that is only a paragraph, a table or a quote is never zoomed.
+ */
+export function resolveSubpath(text: string, subpath: string): Range | null {
+  const parts = subpath.split('#').map((p) => p.trim()).filter((p) => p !== '');
+  if (parts.length === 0) return null;
+  const o = analyse(text);
+
+  let block: string | null = null;
+  if (parts[parts.length - 1].startsWith('^')) block = parts.pop()!.slice(1);
+  if (block === '' || (block === null && parts.length === 0)) return null;
+
+  // Walk down the headings: each one must sit inside the section of the one before.
+  let lo = 0;
+  let hi = o.lines.length - 1;
+  let found = -1;
+  for (const part of parts) {
+    let next = -1;
+    for (let i = lo; i <= hi; i++) {
+      if (level(o, i) > 0 && (found === -1 || level(o, i) > level(o, found)) && sameHeading(o.lines[i].text, part)) {
+        next = i;
+        break;
+      }
+    }
+    if (next === -1) return null;
+    found = next;
+    lo = found + 1;
+    hi = Math.max(found, sectionEnd(o, found));
+  }
+
+  if (block === null) return toRange(o, { start: found, end: sectionEnd(o, found) });
+  for (let i = lo; i <= hi; i++) {
+    if (o.skip[i] || !hasBlockId(o, i, block)) continue;
+    const t = target(o, i);
+    return t && isItem(o, t.start) ? toRange(o, t) : null;
+  }
+  return null;
+}
+
+/** Enough to find a zoom again later without a line number: the line's own text and which of the identical ones it is. */
+export interface ZoomRef {
+  line: string;
+  nth: number;
+}
+
+function startsZoom(o: Outline, i: number): boolean {
+  return level(o, i) > 0 || isItem(o, i);
+}
+
+/** Describe the zoom that starts at offset `from`; null when it does not start at a heading or list item. */
+export function describeZoom(text: string, from: number): ZoomRef | null {
+  const o = analyse(text);
+  const at = lineAt(o, from);
+  if (o.lines[at].from !== from || !startsZoom(o, at)) return null;
+  const line = o.lines[at].text.trim();
+  let nth = 0;
+  for (let i = 0; i < at; i++) if (startsZoom(o, i) && o.lines[i].text.trim() === line) nth++;
+  return { line, nth };
+}
+
+/** The range a stored zoom points at now, or null when that heading or item is gone. */
+export function resolveZoom(text: string, ref: ZoomRef): Range | null {
+  const o = analyse(text);
+  let seen = 0;
+  for (let i = 0; i < o.lines.length; i++) {
+    if (!startsZoom(o, i) || o.lines[i].text.trim() !== ref.line) continue;
+    if (seen++ === ref.nth) return toRange(o, target(o, i)!);
+  }
+  return null;
+}

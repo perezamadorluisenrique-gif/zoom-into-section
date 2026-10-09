@@ -23,12 +23,31 @@ first. In reading view the note shows in full.
 | To | Do this |
 |---|---|
 | Zoom in | Run the command, use **Zoom in** in the editor's right-click menu, or click a list bullet. |
+| Zoom into any heading | Run **Zoom into a heading…** and pick it from the list. |
 | Zoom to a parent | Click a crumb in the bar. |
 | Go up one level | The command **Zoom out one level**. From the top level it shows the whole note. |
 | Zoom out | Click the first crumb, run **Zoom out to the whole note**, or use the right-click menu. |
 
 The commands have no hotkeys by default; set the ones you want in **Settings →
 Hotkeys**, for example Ctrl/Cmd + `.` to zoom in.
+
+## Links, headings and tabs
+
+- **Open links zoomed in.** Turn on **Open links to a heading zoomed in** and
+  following `[[Note#Heading]]`, `[[#Heading]]`, a nested `[[Note#Heading#Subheading]]`
+  or a link to a list item (`[[Note#^block-id]]`) opens the note zoomed into
+  that section or item. It works for a click, Ctrl/Cmd + click in a new tab and
+  anything else that opens a link. Links to a whole note, to a paragraph or to a
+  heading that does not exist open the note as usual. It is off by default.
+- **Zoom into a heading.** The command **Zoom into a heading…** lists the
+  headings of the note; pick one to zoom straight into it, without moving the
+  cursor first.
+- **Each tab remembers its zoom.** Go to another note in a tab and come back, or
+  use back and forward, and the note is zoomed as you left it. Tabs that are
+  open when you quit are zoomed again when you start Obsidian. The zoom is kept
+  as the heading's text, not a line number, so it follows the heading when the
+  note changes above it, and is dropped if the heading is renamed or deleted.
+  Leaving the zoom forgets it.
 
 ## Good to know
 
@@ -46,6 +65,8 @@ Hotkeys**, for example Ctrl/Cmd + `.` to zoom in.
 |---|---|---|
 | Zoom in when clicking a bullet | on | Click the bullet of a list item in Live Preview to zoom into it. |
 | Escape zooms out | off | While zoomed, Escape goes up one level, and out of the zoom at the top. Leave it off with Vim key bindings. |
+| Open links to a heading zoomed in | off | Following a link to a heading or list item opens the note zoomed into it. |
+| Remember the zoom in each tab | on | Coming back to a note that was zoomed in a tab, also after restarting Obsidian, zooms it again. |
 
 ## Coming from Zoom
 

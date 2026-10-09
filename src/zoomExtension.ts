@@ -14,6 +14,8 @@ export interface ZoomOptions {
   zoomOnBullet: () => boolean;
   /** Escape zooms out one level while zoomed. */
   escapeZoomsOut: () => boolean;
+  /** Told when the zoom was set or cleared, and (with `edited`) when the note changed while zoomed. */
+  onZoom?: (view: EditorView, edited: boolean) => void;
 }
 
 const setZoom = StateEffect.define<Range | null>({
@@ -45,7 +47,8 @@ function hiddenRanges(range: Range | null, length: number): DecorationSet {
 const hiddenField = StateField.define<DecorationSet>({
   create: () => Decoration.none,
   update(value, tr) {
-    const before = tr.startState.field(zoomField);
+    // The plugin can be switched on with editors already open: their old state has no zoom field yet.
+    const before = tr.startState.field(zoomField, false);
     const after = tr.state.field(zoomField);
     if (before === after && !tr.docChanged) return value;
     return hiddenRanges(after, tr.state.doc.length);
@@ -69,7 +72,7 @@ function clamp(range: SelectionRange, zoom: Range): SelectionRange {
  */
 const keepSelectionInside = EditorState.transactionFilter.of((tr) => {
   const effect = tr.effects.find((e) => e.is(setZoom));
-  const before = tr.startState.field(zoomField);
+  const before = tr.startState.field(zoomField, false) ?? null;
   let zoom: Range | null = before;
   if (effect) zoom = effect.value;
   else if (before) zoom = { from: tr.changes.mapPos(before.from, -1), to: tr.changes.mapPos(before.to, 1) };
@@ -127,7 +130,7 @@ function crumbBar(view: EditorView): Panel {
     dom,
     top: true,
     update(update) {
-      if (!update.docChanged && update.startState.field(zoomField) === update.state.field(zoomField)) return;
+      if (!update.docChanged && (update.startState.field(zoomField, false) ?? null) === update.state.field(zoomField)) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(render, update.docChanged ? 250 : 0);
     },
@@ -160,8 +163,15 @@ const escapeKey = EditorView.domEventHandlers({
   },
 });
 
+const notify = EditorView.updateListener.of((update) => {
+  const onZoom = update.state.facet(options).onZoom;
+  if (!onZoom) return;
+  if (update.transactions.some((tr) => tr.effects.some((e) => e.is(setZoom)))) onZoom(update.view, false);
+  else if (update.docChanged && update.state.field(zoomField)) onZoom(update.view, true);
+});
+
 export function zoomExtension(opts: ZoomOptions): Extension {
-  return [options.of(opts), zoomField, hiddenField, keepSelectionInside, bar, bulletClick, Prec.high(escapeKey)];
+  return [options.of(opts), zoomField, hiddenField, keepSelectionInside, bar, bulletClick, notify, Prec.high(escapeKey)];
 }
 
 export function currentZoom(state: EditorState): Range | null {
@@ -178,6 +188,15 @@ function show(view: EditorView, range: Range | null, scroll: 'start' | 'center')
 export function zoomAt(view: EditorView, pos: number): boolean {
   const range = zoomRange(view.state.doc.toString(), pos);
   if (!range) return false;
+  const current = currentZoom(view.state);
+  if (current && current.from === range.from && current.to === range.to) return true;
+  show(view, range, 'start');
+  return true;
+}
+
+/** Zoom to a range found elsewhere (a link, a remembered zoom), then bring its start into view. */
+export function zoomTo(view: EditorView, range: Range): boolean {
+  if (range.from < 0 || range.to > view.state.doc.length || range.from > range.to) return false;
   const current = currentZoom(view.state);
   if (current && current.from === range.from && current.to === range.to) return true;
   show(view, range, 'start');

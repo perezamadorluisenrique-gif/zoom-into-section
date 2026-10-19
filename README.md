@@ -117,6 +117,8 @@ In Obsidian, open **Settings → Community plugins → Browse** and search for
 All of them are in the community directory: Settings -> Community plugins ->
 Browse, then search for the name.
 
+Follow new plugins and updates on X: [@luenpereza](https://x.com/luenpereza)
+
 ## License
 
 MIT

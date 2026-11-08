@@ -5,6 +5,7 @@ import type { EditorView } from '@codemirror/view';
 import { describeZoom, listHeadings, resolveSubpath, resolveZoom } from './src/outline.ts';
 import type { Heading, ZoomRef } from './src/outline.ts';
 import { currentZoom, zoomAt, zoomExtension, zoomIn, zoomOut, zoomParent, zoomTo } from './src/zoomExtension.ts';
+import { moreDefinitions, renderMore } from './src/more-link.ts';
 
 interface ZoomSettings {
   /** Clicking the bullet of a list item zooms into it. */
@@ -391,6 +392,7 @@ class ZoomSettingTab extends PluginSettingTab {
       { ...TEXT.escapeZoomsOut, control: { type: 'toggle', key: 'escapeZoomsOut', defaultValue: DEFAULT_SETTINGS.escapeZoomsOut } },
       { ...TEXT.zoomOnLink, control: { type: 'toggle', key: 'zoomOnLink', defaultValue: DEFAULT_SETTINGS.zoomOnLink } },
       { ...TEXT.rememberZoom, control: { type: 'toggle', key: 'rememberZoom', defaultValue: DEFAULT_SETTINGS.rememberZoom } },
+      ...(moreDefinitions() as SettingDefinitionItem[]),
     ];
   }
 
@@ -423,5 +425,6 @@ class ZoomSettingTab extends PluginSettingTab {
       .setName(TEXT.rememberZoom.name)
       .setDesc(TEXT.rememberZoom.desc)
       .addToggle((t) => t.setValue(this.plugin.settings.rememberZoom).onChange((v) => this.setControlValue('rememberZoom', v)));
+    renderMore(this.containerEl, (el) => new Setting(el));
   }
 }

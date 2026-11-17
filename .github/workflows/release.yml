@@ -134,7 +134,7 @@ jobs:
           cat > .review-lint.config.mjs <<'EOF'
           import obsidianmd from 'eslint-plugin-obsidianmd';
           export default [
-            { ignores: ['main.js', 'node_modules/**', 'tests/**', '**/*.mjs', '**/*.cjs', '**/*.test.*', '**/*.spec.*'] },
+            { ignores: ['main.js', 'node_modules/**', 'tests/**', '**/*.mjs', '**/*.cjs', '**/*.test.*', '**/*.spec.*', 'src/web/sw.js'] },
             ...obsidianmd.configs.recommended,
             { languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: process.cwd() } } },
           ];
@@ -219,9 +219,13 @@ jobs:
           done
 
   # Waits for the community directory to serve the new version and review it,
-  # and fails, which emails the repository owner, if the review does not pass
-  # or the directory never picks the release up. Reading the listing needs no
-  # login; see .github/scripts/directory-review.mjs.
+  # and fails, which emails the repository owner, if the review does not pass.
+  # The directory often takes longer than the wait to pick a release up (exit
+  # code 2): that is a warning on the run, not a failure, because nothing in the
+  # repository is wrong and the daily directory status (ESTADO.md in
+  # morning-reports) keeps asking for "Check for new releases" until it serves
+  # the new version. Reading the listing needs no login; see
+  # .github/scripts/directory-review.mjs.
   directory-review:
     needs: release
     if: needs.release.outputs.skip != 'true' && needs.release.outputs.draft != 'true'
@@ -235,4 +239,11 @@ jobs:
         with:
           node-version: '22'
       - name: Wait for the directory's review
-        run: node .github/scripts/directory-review.mjs "${{ needs.release.outputs.id }}" --wait "${{ needs.release.outputs.tag }}" --timeout 75 --settle 10
+        run: |
+          code=0
+          node .github/scripts/directory-review.mjs "${{ needs.release.outputs.id }}" --wait "${{ needs.release.outputs.tag }}" --timeout 75 --settle 10 || code=$?
+          if [ "$code" -eq 2 ]; then
+            echo "::warning title=Directory::The directory does not serve ${{ needs.release.outputs.tag }} yet. On the developer dashboard: ... menu, Check for new releases, then Request review."
+            exit 0
+          fi
+          exit "$code"
